@@ -1,6 +1,6 @@
 from squarespace import Squarespace
 from simple_salesforce import Salesforce
-import os
+import os 
 
 # Get the ID of the last Squarespace order in Salesforce
 soql_string = "select max(Squarespace_Order_ID__c) , max(CloseDate)  from Opportunity where Squarespace_Order_ID__c != null"
@@ -52,7 +52,7 @@ def updateSalesforce(_order):
 for order in store.orders(fulfillmentStatus='PENDING'): # Iterate through 20 orders
     if (float(order['orderNumber']) > max_id): 
         updateSalesforce(order)
-        print(order['orderNumber'])
+        print(order['order-Number'])
         print(order['modifiedOn'])
         print(order['fulfillmentStatus'])
 try:
