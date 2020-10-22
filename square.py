@@ -1,13 +1,16 @@
 from squarespace import Squarespace
 from simple_salesforce import Salesforce
+from datetime import date
 import os
 
+# Create contact in Salesforce based on email address
 def createContact(_firstname,_lastname,_email):
-    result = sf.Contact.create({'FirstName':_firstname,'LastName':_lastname,'Email':_email,'RecordTypeId':'0125A0000013RldQAE'})
+    result = sf.Contact.create({'FirstName':_firstname,'LastName':_lastname,'Email':_email,'RecordTypeId':os.environ.get('CONTACT_RECORDTYPE_ID')})
     print("### created contact")
     print(result)
     return result
 
+# Lookup contact in Salesforce based on email address
 def lookupContact(_order):
     soql_string = "SELECT Id, AccountId, Email FROM Contact WHERE Email = '{}'".format(_order['customerEmail'])
     
@@ -26,18 +29,15 @@ def lookupContact(_order):
     except IndexError as e:
         print("lookup/create error")
 
-# add address to contact from squarespace? - Wait
-# add phone number
-# add contact / account creation
-# multiple line item orders
-# product name data formating 
+# Mapping of Squarespace Order to Opportunity
+# Currently does not handle multiple order line items
 def updateSalesforce(_order,_accountId,_contactId):
     _orderdesc = ''
     if len(_order['lineItems']) > 1:
         _orderdesc = 'Multiple line items'
 
     result = sf.Opportunity.create({'AccountId':_accountId,
-                        'RecordTypeId':'0125A000001AnfqQAC',
+                        'RecordTypeId':os.environ.get('OPPORTUNITY_RECORDTYPE_ID'),
                         'npsp__Primary_Contact__c':_contactId,
                         'StageName':'Awarded/Closed',
                         'CloseDate':_order['modifiedOn'],
@@ -60,29 +60,26 @@ def updateSalesforce(_order,_accountId,_contactId):
     print("### create Opportunity")
     print(result)
 
-def processOrders():
-    # Iterate through pending Squarespace orders and send new orders to Salesforce    
-    for order in store.orders(fulfillmentStatus='FULFILLED'): # Iterate through 20 orders
+# Iterate through FULFILLED Squarespace orders and add them to Salesforce as Opportunties
+def processOrders():       
+    for order in store.orders(fulfillmentStatus='FULFILLED',modifiedAfter=max_closed_date,modifiedBefore=cur_date): # Iterate through 20 orders
         if (float(order['orderNumber']) > max_id): 
             lookupContact(order)
-            print("### squarespace order")
-            print(order['orderNumber'])
-            print(order['modifiedOn'])
-            print(order['fulfillmentStatus'])
     try:
         while store.next_page() is not None:
             for order in store.next_page(): # Iterate through another 20 orders
-                print(order['orderNumber'])
+                if (float(order['orderNumber']) > max_id): 
+                    lookupContact(order)
     except Exception as e:
         print(e)
 
-
+# Find new orders in Squarespace and add them to Salesforce as Opportunities
 print("### running square.py --")
-# Get the ID of the last Squarespace order in Salesforce
 soql_string = "select max(Squarespace_Order_ID__c) , max(CloseDate)  from Opportunity where Squarespace_Order_ID__c != null"
 sf = Salesforce(username=os.environ.get('SFUSERNAME'), password=os.environ.get('SFPASSWORD'), security_token=os.environ.get('SFTOKEN'))
 result = sf.query(soql_string)
 max_id = result['records'][0]['expr0']
-
+max_closed_date = result['records'][0]['expr1']+'T00:00:00.900Z'
+cur_date = str(date.today())+'T00:00:00.900Z'
 store = Squarespace(os.environ.get('SQUARESPACETOKEN'))
 processOrders()
